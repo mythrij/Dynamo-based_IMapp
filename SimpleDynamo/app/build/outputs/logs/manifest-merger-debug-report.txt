@@ -1,6 +1,6 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:2:1-27:12
+ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:2:1-29:12
 	package
 		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:3:5-53
 		INJECTED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml
@@ -15,38 +15,46 @@ ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest
 		INJECTED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml
 	xmlns:android
 		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:2:11-69
+uses-permission#android.permission.INTERNET
+ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:6:5-66
+	android:name
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:6:22-64
+uses-permission#android.permission.READ_PHONE_STATE
+ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:7:5-74
+	android:name
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:7:22-72
 application
-ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:7:5-25:19
+ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:9:5-27:19
 	android:label
-		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:10:9-41
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:12:9-41
 	android:allowBackup
-		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:8:9-35
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:10:9-35
 	android:icon
-		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:9:9-45
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:11:9-45
 	android:theme
-		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:11:9-40
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:13:9-40
 activity#edu.buffalo.cse.cse486586.simpledynamo.SimpleDynamoActivity
-ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:12:9-20:20
+ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:14:9-22:20
 	android:label
-		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:14:13-45
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:16:13-45
 	android:name
-		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:13:13-87
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:15:13-87
 intent-filter#android.intent.action.MAIN+android.intent.category.LAUNCHER
-ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:15:13-19:29
+ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:17:13-21:29
 action#android.intent.action.MAIN
-ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:16:17-69
+ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:18:17-69
 	android:name
-		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:16:25-66
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:18:25-66
 category#android.intent.category.LAUNCHER
-ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:18:17-77
+ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:20:17-77
 	android:name
-		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:18:27-74
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:20:27-74
 provider#edu.buffalo.cse.cse486586.simpledynamo.SimpleDynamoProvider
-ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:22:9-23:85
+ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:24:9-25:85
 	android:authorities
-		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:23:13-82
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:25:13-82
 	android:name
-		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:22:19-93
+		ADDED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml:24:19-93
 uses-sdk
 INJECTED from /home/mythri/Desktop/DS/PA4/SimpleDynamo/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 	android:targetSdkVersion

@@ -17,7 +17,25 @@
         android:layout_alignParentRight="true"
         android:fadeScrollbars="true"
         android:gravity="bottom"
-        android:maxLines="13"
+        android:maxLines="15"
         android:textIsSelectable="true"
-        android:scrollbars="vertical" />
+        android:scrollbars="vertical"
+        android:layout_above="@+id/editText1"
+        android:layout_below="@+id/button1"/>
+
+    <EditText
+        android:id="@+id/editText1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentLeft="true"
+        android:hint="Type to compose"
+        android:maxLines="5" >
+
+        <requestFocus />
+    </EditText>
+
+    <Button android:id="@+id/button1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentLeft="true" android:layout_alignParentTop="true" android:text="Test"/>
+    <Button android:id="@+id/button2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_centerHorizontal="true" android:layout_alignParentTop="true" android:text="QUERY *"/>
+    <Button android:id="@+id/button3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentRight="true" android:layout_alignParentTop="true" android:text="DELETE *"/>
 </RelativeLayout>

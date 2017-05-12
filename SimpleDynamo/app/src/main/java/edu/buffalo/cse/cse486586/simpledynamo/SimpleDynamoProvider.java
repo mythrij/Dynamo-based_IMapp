@@ -33,6 +33,7 @@ import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import static android.content.ContentValues.TAG;
+import static android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE;
 
 public class SimpleDynamoProvider extends ContentProvider {
 
@@ -101,6 +102,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 	String node_id = "";
 	ArrayList<Node> NodeList = new ArrayList();
 	Node node;
+	Boolean pauseEverything;
 
 	//------------------------------------------------------------------------------------------------------
 
@@ -112,7 +114,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 			for (File f : filearray) {
 				if (f.getName().equals(selection)) {
 					f.delete();
+
 				}
+			}
+			// new client task and delete that key from avds
+			if (selectionArgs == null) {
+				String newstring = "del1:" + selection + "\n";
+				new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, newstring);
 			}
 		}
 
@@ -170,6 +178,37 @@ public class SimpleDynamoProvider extends ContentProvider {
 		return list_nodes;
 	}
 
+	public void insert_into(String key, String val) {
+		Log.d(TAG,"Incoming insert: key: " + key + " value: " + val);
+		Context ctx = getContext();
+		String read_file=null;
+		try {
+			FileInputStream fis = ctx.openFileInput(key);
+			InputStreamReader isr = new InputStreamReader(fis);
+			BufferedReader br = new BufferedReader(isr);
+			read_file = br.readLine();
+		}
+		catch (Exception e) {
+			Log.d(TAG,"File exception: " + e.toString());
+		}
+
+		if(read_file != null){
+			val = splitcompare(read_file, val);
+		}
+
+		if (ctx != null) {
+			try {
+				FileOutputStream outputStream = ctx.openFileOutput(key, Context.MODE_PRIVATE);
+				outputStream.write(val.getBytes());
+				outputStream.close();
+				Log.d(TAG,"Insert complete");
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+
+
+	}
 
 	@Override
 	public Uri insert(Uri uri, ContentValues values) {
@@ -178,20 +217,17 @@ public class SimpleDynamoProvider extends ContentProvider {
 		String string = values.getAsString("value");
 		FileOutputStream outputStream;
 
+		Log.d(TAG,"Entered insert for is: key: " + filename + " value: " +string);
 
 		if (string.contains("#")) {
 			try {
 				Log.d(TAG, "Inserting into current node, no conditions to be checked");
-				Context ctx = getContext();
-				if (ctx != null) {
-					outputStream = ctx.openFileOutput(filename, Context.MODE_PRIVATE);
-					outputStream.write(string.getBytes());
-					outputStream.close();
-				}
+				insert_into(filename,string);
 			} catch (Exception e) {
-				Log.e(TAG, "File write failed");
+				Log.d(TAG, "File write failed");
 			}
-		} else if (!string.contains("#")) {
+		}
+		else if (!string.contains("#")) {
 
 			string = string + "#" + System.currentTimeMillis();
 
@@ -212,7 +248,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 				//call function to find out coordinator and replicas -
 
-				Log.d(TAG, "Insert called for: " + filename + " " + string);
+				Log.d(TAG, "First insert for: " + filename + " " + string);
 
 				//if string contains timestamp, call is coming from another server. So directly insert and do not call clienttask.
 				// else do below
@@ -222,18 +258,12 @@ public class SimpleDynamoProvider extends ContentProvider {
 					//------------------------------------------------------------------------------------------- writing message to file
 					try {
 						Log.d(TAG, "Inserting into current node");
-						Context ctx = getContext();
-						if (ctx != null) {
-							outputStream = ctx.openFileOutput(filename, Context.MODE_PRIVATE);
-							outputStream.write(string.getBytes());
-							outputStream.close();
-						}
+						insert_into(filename,string);
 					} catch (Exception e) {
-						Log.e(TAG, "File write failed");
+						Log.d(TAG, "File write failed");
 					}
 
 					Log.d(TAG, "Calling clienttask function");
-
 
 					//if it was inserted into coord
 					if (node.AvdNo.equals(coord)) {
@@ -250,21 +280,21 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, sendToClient);
 
-				} else {
-
-					sendToClient = "insertCRR:" + coord + ":" + rep1 + ":" + rep2 + ":" + filename + ":" + string + "\n";
-					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, sendToClient);        // if it doesnt belong to any of the three nodes, send all three to client as part of mssg to be sent to servers
-
 				}
 
-			} catch (NoSuchAlgorithmException e) {
+				else {
+					sendToClient = "insertCRR:" + coord + ":" + rep1 + ":" + rep2 + ":" + filename + ":" + string + "\n";
+					new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, sendToClient);        // if it doesnt belong to any of the three nodes, send all three to client as part of mssg to be sent to servers
+				}
+
+			}
+			catch (NoSuchAlgorithmException e) {
 				e.printStackTrace();
 			}
 		}
 
 		return uri;
 	}
-
 
 	@Override
 	public boolean onCreate() {
@@ -274,7 +304,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 		final String myPort = String.valueOf((Integer.parseInt(portStr) * 2));
 
 		Log.d(TAG, "Entered OnCreate: " + myPort);
-
+		pauseEverything = false;
 		try {
 			node_id = genHash(portStr);
 		} catch (NoSuchAlgorithmException e) {
@@ -308,11 +338,15 @@ public class SimpleDynamoProvider extends ContentProvider {
 			e.printStackTrace();
 		}
 
+		String SPort = node.AvdNo;
+		String s = "pollingall:"+SPort;
+		new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, s);
+
 		try {
 			ServerSocket serverSocket = new ServerSocket(SERVER_PORT);
 			new ServerTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, serverSocket);
 		} catch (IOException e) {
-			Log.e(TAG, "Can't create a ServerSocket");
+			Log.d(TAG, "Can't create a ServerSocket");
 			return false;
 		}
 
@@ -341,6 +375,18 @@ public class SimpleDynamoProvider extends ContentProvider {
 		Context ctx = getContext();
 		MatrixCursor c = null;
 
+		if (selectionArgs == null || (selectionArgs!=null && !selectionArgs.equals("FAIL_RECOVER"))) {
+			while (pauseEverything == false) {
+				try {
+					Log.d(TAG,"Sleeping");
+					Thread.sleep(100);
+				}
+				catch (Exception e) {
+					Log.d(TAG,"Could not sleep");
+				}
+			}
+		}
+
 		if (!selection.equals("@") && !selection.equals("*")) {
 
 			String SelectionHash = null;
@@ -364,7 +410,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 						if (node.AvdNo.equals(coord) || node.AvdNo.equals(rep1) || node.AvdNo.equals(rep2)) {
 
-							Log.d("QUERY", "QUERY exists here. Retreiving...");
+							Log.d("QUERY", "QUERY exists here. Retrieving...");
 							FileInputStream fis = null;
 
 							fis = ctx.openFileInput(selection);
@@ -372,7 +418,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 							BufferedReader br = new BufferedReader(isr);
 							kv = br.readLine();
 
-							Log.v("file content: ", kv);
+							Log.d("file content: ", kv);
 
 							if (node.AvdNo.equals(coord)) {
 								query2 = "query2:" + rep1 + ":" + rep2 + ":" + senderport + ":" + selection;
@@ -384,9 +430,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 
 						else {
-
 							query2 = "query2:" + coord + ":" + rep1 + ":" + rep2 + ":" + senderport + ":" + selection;
-
 						}
 
 						BlockingQueue<String> q = new ArrayBlockingQueue<String>(1);
@@ -411,40 +455,39 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 				}
 
+				else if (selectionArgs != null && selectionArgs[0].equals("RP")) {
+					Log.d("QUERY", "Remote call. Sending back to server");
+						//while loop
+					try {
 
+						FileInputStream fis = ctx.openFileInput(selection);
+						InputStreamReader isr = new InputStreamReader(fis);
+						BufferedReader br = new BufferedReader(isr);
+						String kv;
+						kv = br.readLine();
+						//String q2 = "qback" + ":" + selection + ":" + kv + ":" + selectionArgs[0] + ":\n";
 
-			else if (selectionArgs != null && selectionArgs[0].equals("RP")) {
+						c = new MatrixCursor(new String[]{"key", "value"});
+						c.addRow(new Object[]{selection, kv});
 
-				Log.d("QUERY", "Remote call. Sending back original port");
-				try {
+					} catch (FileNotFoundException e) {
+						e.printStackTrace();
+						return null;
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
 
-					FileInputStream fis = ctx.openFileInput(selection);
-					InputStreamReader isr = new InputStreamReader(fis);
-					BufferedReader br = new BufferedReader(isr);
-					String kv;
-					kv = br.readLine();
-					//String q2 = "qback" + ":" + selection + ":" + kv + ":" + selectionArgs[0] + ":\n";
-
-					c = new MatrixCursor(new String[]{"key", "value"});
-					c.addRow(new Object[]{selection, kv});
-
-				} catch (FileNotFoundException e) {
-					e.printStackTrace();
-					return null;
-				} catch (IOException e) {
-					e.printStackTrace();
 				}
 
-			}
 			} catch (Exception e) {
-				Log.i(TAG, "Exception e: " + e.toString());
+				Log.d(TAG, "Exception e: " + e.toString());
 				e.printStackTrace();
 
 			}
 
 		}
 		else if (selection.equals("@") || selection.equals("*")) {
-
+//wait
 			c = new MatrixCursor(new String[]{"key", "value"});
 
 			File[] filearray = getContext().getFilesDir().listFiles();
@@ -458,8 +501,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 					BufferedReader br = new BufferedReader(isr);
 					String kv;
 					kv = br.readLine();
-					Log.v("file content: ", kv);
-					kv = kv.split("#")[0];
+					Log.d("file content: ", kv);
+					if (selectionArgs==null || (selectionArgs!=null && !selectionArgs[0].equals("FAIL_RECOVER")))
+						kv = kv.split("#")[0];
 					c.addRow(new Object[]{f.getName(), kv});
 
                     /*if (selectionArgs != null) {
@@ -505,14 +549,12 @@ public class SimpleDynamoProvider extends ContentProvider {
 					}
 				}
 
-
 			}
 		}
 
 		return c;
 
 	}
-
 
 	@Override
 	public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
@@ -532,7 +574,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 
 	//------------------------------------------------------------------------------------------------------------ SERVER TASK ----------------
-
 	private class ServerTask extends AsyncTask<ServerSocket, String, Void> {
 
 		@Override
@@ -568,6 +609,48 @@ public class SimpleDynamoProvider extends ContentProvider {
 					String[] parts = message.split(":");
 					String flag = parts[0];
 
+					if(flag.equals("delthis")){
+
+						String keytodel = parts[1];
+						String[] argsflag = {"duplicates"};
+
+						OutputStream o2stream = socket.getOutputStream();
+						OutputStreamWriter op2writer = new OutputStreamWriter(o2stream);
+						BufferedWriter b2 = new BufferedWriter(op2writer);
+
+						delete(mNewUri,keytodel,argsflag);
+
+						b2.write("deleteEachAck");
+						b2.flush();
+						socket.close();
+
+					}
+
+					if(flag.equals("getAll")){
+						String[] selectionArgs = {"FAIL_RECOVER"};
+						Cursor cursor = query(mNewUri, null, "@", selectionArgs, null);
+						String out = "Recovery-";
+						if(cursor.moveToFirst()){
+							do{
+								String key = cursor.getString(cursor.getColumnIndex("key"));
+								String value = cursor.getString(cursor.getColumnIndex("value"));
+								out += key+":"+value+"@";
+
+							}while(cursor.moveToNext());
+						}
+						cursor.close();
+
+						//out+= "-"+node.SNode;
+						OutputStream o2stream = socket.getOutputStream();
+						OutputStreamWriter op2writer = new OutputStreamWriter(o2stream);
+						Log.d(TAG, "Fetched Values form: "+node.getAvdNo() + ": "+out);
+						BufferedWriter b2 = new BufferedWriter(op2writer);
+						b2.write(out+"\n");
+						b2.flush();
+						socket.close();
+
+					}
+
 					if(flag.equals("delete")){
 
 						OutputStream o2stream = socket.getOutputStream();
@@ -592,7 +675,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 							}while(cursor.moveToNext());
 						}
-
+						cursor.close();
 
 						out+= "-"+node.SNode;
 						OutputStream o2stream = socket.getOutputStream();
@@ -623,7 +706,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 							}while(cursor.moveToNext());
 						}
-
+						cursor.close();
 						Log.d(TAG,"Writing query value: " + out);
 						OutputStream o1stream = socket.getOutputStream();
 						OutputStreamWriter op1writer = new OutputStreamWriter(o1stream);
@@ -684,13 +767,14 @@ public class SimpleDynamoProvider extends ContentProvider {
 	}
 
 	// ------------------------------------------------------------------------------------------------------------ CLIENT TASK --------------
-
-
 	private class ClientTask extends AsyncTask<Object, Void, Void> {
 
 		@Override
 		protected Void doInBackground(Object... msgs) {
 			try {
+
+				final String KEY_FIELD = "key";
+				final String VALUE_FIELD = "value";
 
 				String key, mssg, f;
 				String x = msgs[0].toString();
@@ -700,78 +784,220 @@ public class SimpleDynamoProvider extends ContentProvider {
 				String[] getparts = x.split(":");
 				f = getparts[0];
 
-				if(f.equals("delete")){
-					Log.d(TAG,"Calling delete");
+				if(f.equals("del1")) {
 
-					String nextdel = node.SNode;
+;					String keytodel = getparts[1];
 
-					while(!node.AvdNo.equals(nextdel)) {
-						Log.d(TAG,"Sending delete request to node: " + nextdel);
-						Socket sockets4 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-								Integer.parseInt(Integer.toString(Integer.parseInt(nextdel) * 2)));
+					String[] n1 = {"",""};
+					n1[0]= node.SNode;
 
-						OutputStream stream = sockets4.getOutputStream();                           //-------------------sending to server node ot call delete for next node
-						OutputStreamWriter owriter = new OutputStreamWriter(stream);
-						BufferedWriter bw = new BufferedWriter(owriter);
-						String del = "delete" + ":" + "xyz" + "\n";
-						bw.write(del);
-						bw.flush();
-
-						InputStream ipstream = sockets4.getInputStream();
-						InputStreamReader ipsreader = new InputStreamReader(ipstream);
-						BufferedReader br = new BufferedReader(ipsreader);
-						nextdel = br.readLine();
-						if (nextdel == null)
-							throw new NullPointerException();
-						Log.d(TAG,"Delete ack received");
-						//if (ack.startsWith("deleted"))
-						sockets4.close();
+					for (Node s : NodeList) {
+						if (node.SNode.equals(s.AvdNo)) {
+							n1[1] = s.SNode;
+						}
 					}
+
+					String nextdel = "delthis:"+keytodel+"\n";
+					String ack = "";
+
+					for(int i=0;i<=1;i++) {
+
+						try {
+
+							Socket sockets4 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+									Integer.parseInt(Integer.toString(Integer.parseInt(n1[i]) * 2)));
+
+							OutputStream stream = sockets4.getOutputStream();                           //-------------------sending to server node to call delete for next node
+							OutputStreamWriter owriter = new OutputStreamWriter(stream);
+							BufferedWriter bw = new BufferedWriter(owriter);
+							bw.write(nextdel);
+							bw.flush();
+
+							InputStream ipstream = sockets4.getInputStream();
+							InputStreamReader ipsreader = new InputStreamReader(ipstream);
+							BufferedReader br = new BufferedReader(ipsreader);
+							ack = br.readLine();
+							if (ack == null) {
+								sockets4.close();
+							} else if (ack.startsWith("deleteEachAck")) {
+								Log.d(TAG, "Delete each ack received");
+								sockets4.close();
+
+							}
+							//if (ack.startsWith("deleted"))
+						}catch(Exception e)	{
+							Log.d(TAG, "ClientTask Exception within loop: " + e.toString());
+							e.printStackTrace();
+						}
+					}
+				}
+
+				if(f.equals("pollingall")){
+					delete(mNewUri,"@",null);
+					String senderport = getparts[1];
+					String get2query = "getAll"+ ":"+senderport+"\n";
+
+					for(Node nde:NodeList) {
+						// dont query this very node
+						if (nde.AvdNo.equals(node.AvdNo)){
+							continue;
+						}
+
+						try {
+							Log.d(TAG, "polling each avd for its message");
+							Socket sockets4 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+									Integer.parseInt(Integer.toString(Integer.parseInt(nde.AvdNo) * 2)));
+
+							OutputStream stream = sockets4.getOutputStream();                           //-------------------query request being passed onto all nodes
+							OutputStreamWriter owriter = new OutputStreamWriter(stream);
+							BufferedWriter bw = new BufferedWriter(owriter);
+							bw.write(get2query);
+							bw.flush();
+
+							InputStream ipstream = sockets4.getInputStream();
+							InputStreamReader ipsreader = new InputStreamReader(ipstream);
+							BufferedReader br = new BufferedReader(ipsreader);
+							String ack = br.readLine();
+							Log.d(TAG, "Failure handling ack: " + ack);
+
+							if (ack == null) {
+								sockets4.close();
+								throw new NullPointerException();
+							}
+							else {
+								sockets4.close();
+
+								String list = "", ky="", value="";
+								String[] inf = ack.split("-");
+								String split = inf[1];
+								String[] p = split.split("@");
+								for(String a : p) {
+									String[] keyval = a.split(":");
+									ky = keyval[0];
+									value = keyval[1];
+
+									list = genList(genHash(ky));
+									String[] eachnode = list.split(":");
+
+									if (node.AvdNo.equals(eachnode[0]) || node.AvdNo.equals(eachnode[1]) || node.AvdNo.equals(eachnode[2])){
+
+										ContentValues mNewValues = new ContentValues();
+										mNewValues.put(KEY_FIELD, ky);
+										mNewValues.put(VALUE_FIELD, value);
+
+										insert(mNewUri, mNewValues);
+									}
+								}
+							}
+
+						}
+						catch(Exception e){
+							Log.d(TAG, "ClientTask Exception within loop: " + e.toString());
+							e.printStackTrace();
+						}
+					}
+					pauseEverything = true;
 
 				}
 
-				else if(f.equals("StarQuery")){
+				if(f.equals("delete")) {
+					Log.d(TAG, "Calling delete");
+
+					String nextdel = node.SNode;
+
+					//while (!node.AvdNo.equals(nextdel)) {
+					for(Node nde:NodeList) {
+						// dont query this very node
+						if (nde.AvdNo.equals(node.AvdNo)){
+							continue;
+						}
+						try {
+
+
+							Log.d(TAG, "Sending delete request to node: " + nextdel);
+							Socket sockets4 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+									Integer.parseInt(Integer.toString(Integer.parseInt(nde.AvdNo) * 2)));
+
+							OutputStream stream = sockets4.getOutputStream();                           //-------------------sending to server node to call delete for next node
+							OutputStreamWriter owriter = new OutputStreamWriter(stream);
+							BufferedWriter bw = new BufferedWriter(owriter);
+							String del = "delete" + ":" + "xyz" + "\n";
+							bw.write(del);
+							bw.flush();
+
+							InputStream ipstream = sockets4.getInputStream();
+							InputStreamReader ipsreader = new InputStreamReader(ipstream);
+							BufferedReader br = new BufferedReader(ipsreader);
+							nextdel = br.readLine();
+
+							if (nextdel == null)
+								throw new NullPointerException();
+							Log.d(TAG, "Delete ack received");
+							//if (ack.startsWith("deleted"))
+							sockets4.close();
+
+						} catch (Exception e) {
+							Log.d(TAG, "ClientTask Exception within loop: " + e.toString());
+							e.printStackTrace();
+						}
+
+					}
+				}
+
+				if(f.equals("StarQuery")){
 					Log.d(TAG,"In query *");
 					String avdNo = getparts[1];
 					String originalSender = avdNo.trim();
 					String sendingTo = node.SNode;
 
 					String allKeyValPairs = "";
-					while(!sendingTo.equals(originalSender)) {
-						Log.d(TAG,"Sending to: " + sendingTo);
-						Socket sockets3 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-								Integer.parseInt(Integer.toString(Integer.parseInt(sendingTo) * 2)));
-
-						//String displayThis = "display" + ":" + key + ":" + value + "\n";
-
-						String starmsg = "StarQuery:zzz\n";
-						OutputStream stream = sockets3.getOutputStream();                           //-------------------querying being passed onto SuccNode servertask
-						OutputStreamWriter owriter = new OutputStreamWriter(stream);
-						BufferedWriter bw = new BufferedWriter(owriter);
-						bw.write(starmsg);
-
-						bw.flush();
-
-						InputStream ipstream = sockets3.getInputStream();
-						InputStreamReader ipsreader = new InputStreamReader(ipstream);
-						BufferedReader br = new BufferedReader(ipsreader);
-						String ack = br.readLine();
-						if (ack == null) {
-							sockets3.close();
-							throw new NullPointerException();
+//					while(!sendingTo.equals(originalSender)) {
+					for(Node nde:NodeList) {
+						// dont query this very node
+						if (nde.AvdNo.equals(node.AvdNo)){
+							continue;
 						}
-						if (ack.startsWith("StarQueryAck")) {
-							String[] inf = ack.split("-");
-							Log.d(TAG, "Received Star key vals from: "+sendingTo +" next node: "+inf[2].trim());
-							sendingTo = inf[2].trim();
+						try {
 
-							Log.d(TAG,"Star Original Sender: "+originalSender +" Sending TO: "+sendingTo);
+							Log.d(TAG, "Sending to: " + sendingTo);
+							Socket sockets3 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+									Integer.parseInt(Integer.toString(Integer.parseInt(nde.AvdNo) * 2)));
 
-							allKeyValPairs+= inf[1]+"@";
+							//String displayThis = "display" + ":" + key + ":" + value + "\n";
 
-							sockets3.close();
+							String starmsg = "StarQuery:\n";
+							OutputStream stream = sockets3.getOutputStream();                           //-------------------querying being passed onto SuccNode servertask
+							OutputStreamWriter owriter = new OutputStreamWriter(stream);
+							BufferedWriter bw = new BufferedWriter(owriter);
+							bw.write(starmsg);
+
+							bw.flush();
+
+							InputStream ipstream = sockets3.getInputStream();
+							InputStreamReader ipsreader = new InputStreamReader(ipstream);
+							BufferedReader br = new BufferedReader(ipsreader);
+							String ack = br.readLine();
+							if (ack == null) {
+								sockets3.close();
+								throw new NullPointerException();
+							}
+
+							if (ack.startsWith("StarQueryAck")) {
+								String[] inf = ack.split("-");
+								Log.d(TAG, "Received Star key vals from: " + sendingTo + " next node: " + inf[2].trim());
+								sendingTo = inf[2].trim();
+
+								Log.d(TAG, "Star Original Sender: " + originalSender + " Sending TO: " + sendingTo);
+
+								allKeyValPairs += inf[1] + "@";
+
+								sockets3.close();
+							}
+
+						}catch(Exception e){
+							Log.d(TAG, "ClientTask Exception within loop: " + e.toString());
+							e.printStackTrace();
 						}
-
 
 					}
 
@@ -793,37 +1019,47 @@ public class SimpleDynamoProvider extends ContentProvider {
 					key = getparts[n-1];
 					n = n-2;
 					String get2query = "other2queries:"+ key + ":" + senderport+"\n";
-
+					int readQuorum = 0;
 					String finalResult = null;
 					for (int i = 1; i<n; i++) {
-						Log.d(TAG,"Sending Query for key: " + key + " to avd: " + getparts[i]);
-						Socket sockets2 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-								Integer.parseInt(Integer.toString(Integer.parseInt(getparts[i]) * 2)));
+						try{
+							if (readQuorum==2)
+								break;
+							Log.d(TAG, "Sending Query for key: " + key + " to avd: " + getparts[i]);
+							Socket sockets2 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+									Integer.parseInt(Integer.toString(Integer.parseInt(getparts[i]) * 2)));
 
-						OutputStream stream = sockets2.getOutputStream();                           //-------------------query request being passed onto other 2 nodes
-						OutputStreamWriter owriter = new OutputStreamWriter(stream);
-						BufferedWriter bw = new BufferedWriter(owriter);
-						bw.write(get2query);
-						bw.flush();
+							OutputStream stream = sockets2.getOutputStream();                           //-------------------query request being passed onto other 2 nodes
+							OutputStreamWriter owriter = new OutputStreamWriter(stream);
+							BufferedWriter bw = new BufferedWriter(owriter);
+							bw.write(get2query);
+							bw.flush();
 
-						InputStream ipstream = sockets2.getInputStream();
-						InputStreamReader ipsreader = new InputStreamReader(ipstream);
-						BufferedReader br = new BufferedReader(ipsreader);
-						String ack = br.readLine();
-						Log.d(TAG,"other2queries ack: " + ack);
-						if (ack == null) {
-							sockets2.close();
-							throw new NullPointerException();
-						}
-						else {
-							sockets2.close();
-							if (finalResult == null)
-								finalResult = ack;
+							InputStream ipstream = sockets2.getInputStream();
+							InputStreamReader ipsreader = new InputStreamReader(ipstream);
+							BufferedReader br = new BufferedReader(ipsreader);
+							String ack = br.readLine();
+							Log.d(TAG, "other2queries ack: " + ack);
+							if (ack == null) {
+								sockets2.close();
+								throw new NullPointerException();
+							}
 							else {
-								// compare new ack with existing finalResult and replace if necessary
-								finalResult=splitcompare(ack,finalResult);
+								readQuorum++;
+								sockets2.close();
+								if (finalResult == null)
+									finalResult = ack;
+								else {
+									// compare new ack with existing finalResult and replace if necessary
+									finalResult = splitcompare(ack, finalResult);
+								}
+
 							}
 
+						}
+						catch(Exception e){
+								Log.d(TAG, "ClientTask Exception within loop: " + e.toString());
+								e.printStackTrace();
 						}
 
 					}
@@ -840,32 +1076,41 @@ public class SimpleDynamoProvider extends ContentProvider {
 					mssg = getparts[5];
 
 					for (int a = 1; a <= 3; a++) {
-						Log.d(TAG,"Sending to: " + getparts[a]);
-						Socket sockets = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-								Integer.parseInt(Integer.toString(Integer.parseInt(getparts[a]) * 2)));
+
+						try{
+
+							Log.d(TAG, "Sending to: " + getparts[a]);
+							Socket sockets = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+									Integer.parseInt(Integer.toString(Integer.parseInt(getparts[a]) * 2)));
 
 
-						String msgToInsert = "plsInsertDirect" + ":" + key + ":" + mssg + "\n";
+							String msgToInsert = "plsInsertDirect" + ":" + key + ":" + mssg + "\n";
 
-						OutputStream stream = sockets.getOutputStream();
-						OutputStreamWriter owriter = new OutputStreamWriter(stream);                    //-------------------sending message and key to each of the C-R-R to insert directly
-						owriter.write(msgToInsert);
-						owriter.flush();
+							OutputStream stream = sockets.getOutputStream();
+							OutputStreamWriter owriter = new OutputStreamWriter(stream);                    //-------------------sending message and key to each of the C-R-R to insert directly
+							owriter.write(msgToInsert);
+							owriter.flush();
 
-						//reading socket for the acknowledgment
-						InputStream ipstream = sockets.getInputStream();
-						InputStreamReader ipsreader = new InputStreamReader(ipstream);
-						BufferedReader br = new BufferedReader(ipsreader);
-						String ack = br.readLine();
-						Log.d(TAG,"plsInsertDirect ack: " + ack);
-						if (ack == null) {
-							sockets.close();
-							throw new NullPointerException();
+							//reading socket for the acknowledgment
+							InputStream ipstream = sockets.getInputStream();
+							InputStreamReader ipsreader = new InputStreamReader(ipstream);
+							BufferedReader br = new BufferedReader(ipsreader);
+							String ack = br.readLine();
+							Log.d(TAG, "plsInsertDirect ack: " + ack);
+							if (ack == null) {
+								sockets.close();
+								throw new NullPointerException();
+							}
+							if (ack.startsWith("InsertAckCRR")) {
+								sockets.close();
+								Log.d(TAG, "Ack received: " + ack);
+							}
+
+						}catch(Exception e){
+							Log.d(TAG, "ClientTask Exception within loop: " + e.toString());
+							e.printStackTrace();
 						}
-						if (ack.startsWith("InsertAckCRR")) {
-							sockets.close();
-							Log.i(TAG,"Ack received: " + ack);
-						}
+
 					}
 
 				} else if (f.equals("insert2")) {
@@ -875,35 +1120,41 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 					for (int a = 1; a <= 2; a++) {
 
-						Socket sockets = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-								Integer.parseInt(Integer.toString(Integer.parseInt(getparts[a]) * 2)));
+						try{
+
+							Socket sockets = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+									Integer.parseInt(Integer.toString(Integer.parseInt(getparts[a]) * 2)));
 
 
-						String msgToInsert = "plsInsert2" + ":" + key + ":" + mssg + "\n";
+							String msgToInsert = "plsInsert2" + ":" + key + ":" + mssg + "\n";
 
-						OutputStream stream = sockets.getOutputStream();
-						OutputStreamWriter owriter = new OutputStreamWriter(stream);                    //-------------------sending message and key to each of the C-R-R to insert directly
-						owriter.write(msgToInsert);
-						owriter.flush();
+							OutputStream stream = sockets.getOutputStream();
+							OutputStreamWriter owriter = new OutputStreamWriter(stream);                    //-------------------sending message and key to each of the C-R-R to insert directly
+							owriter.write(msgToInsert);
+							owriter.flush();
 
-						//reading socket for the acknowledgment
-						InputStream ipstream = sockets.getInputStream();
-						InputStreamReader ipsreader = new InputStreamReader(ipstream);
-						BufferedReader br = new BufferedReader(ipsreader);
-						String ack = br.readLine();
-						Log.d(TAG,"plsInsert2 ack: " + ack);
-						if (ack == null) {
-							sockets.close();
-							throw new NullPointerException();
+							//reading socket for the acknowledgment
+							InputStream ipstream = sockets.getInputStream();
+							InputStreamReader ipsreader = new InputStreamReader(ipstream);
+							BufferedReader br = new BufferedReader(ipsreader);
+							String ack = br.readLine();
+							Log.d(TAG, "plsInsert2 ack: " + ack);
+							if (ack == null) {
+								sockets.close();
+								throw new NullPointerException();
+							} else if (ack.startsWith("InsertAck2"))
+								sockets.close();
+
+						}catch(Exception e){
+							Log.d(TAG, "ClientTask Exception within loop: " + e.toString());
+							e.printStackTrace();
 						}
-						else if (ack.startsWith("InsertAck2"))
-							sockets.close();
 					}
 				}
 
 			}
 			catch(Exception e){
-				Log.e(TAG, "ClientTask Exception: " + e.toString());
+				Log.d(TAG, "ClientTask Exception: " + e.toString());
 				e.printStackTrace();
 			}
 
